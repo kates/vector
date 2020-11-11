@@ -13,4 +13,8 @@ impl Expression for Literal {
     fn execute(&self, _: &mut State, _: &mut dyn Object) -> Result<Option<Value>> {
         Ok(Some(self.0.clone()))
     }
+
+    fn literal(&self) -> Option<Value> {
+        Some(self.0.clone())
+    }
 }

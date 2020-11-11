@@ -49,6 +49,12 @@ pub enum Error {
 
 pub trait Expression: Send + Sync + std::fmt::Debug + dyn_clone::DynClone {
     fn execute(&self, state: &mut State, object: &mut dyn Object) -> Result<Option<Value>>;
+
+    /// If the expression represents a constant value that can be returned at compile
+    /// time, this function can return it without needing any evaluation.
+    fn literal(&self) -> Option<Value> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Expression);
@@ -74,6 +80,12 @@ macro_rules! expression_dispatch {
             fn execute(&self, state: &mut State, object: &mut dyn Object) -> Result<Option<Value>> {
                 match self {
                     $(Expr::$expr(expression) => expression.execute(state, object)),+
+                }
+            }
+
+            fn literal(&self) -> Option<Value> {
+                match self {
+                    $(Expr::$expr(expression) => expression.literal()),+
                 }
             }
         }

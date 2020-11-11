@@ -177,4 +177,8 @@ impl Expression for ArgumentValidator {
 
         Ok(Some(value))
     }
+
+    fn literal(&self) -> Option<Value> {
+        self.expression.literal()
+    }
 }
