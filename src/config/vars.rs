@@ -1,7 +1,11 @@
 use regex::{Captures, Regex};
 use std::collections::HashMap;
 
-pub fn interpolate(input: &str, vars: &HashMap<String, String>) -> String {
+pub fn interpolate(
+    input: &str,
+    vars: &HashMap<String, String>,
+    warnings: &mut Vec<String>,
+) -> String {
     let re = Regex::new(r"\$\$|\$(\w+)|\$\{(\w+)(?::-([^}]+)?)?\}").unwrap();
     re.replace_all(input, |caps: &Captures<'_>| {
         caps.get(1)
@@ -10,7 +14,7 @@ pub fn interpolate(input: &str, vars: &HashMap<String, String>) -> String {
             .map(|name| {
                 vars.get(name).map(|val| val.as_str()).unwrap_or_else(|| {
                     caps.get(3).map(|m| m.as_str()).unwrap_or_else(|| {
-                        warn!(message = "Unknown env var in config.", name = ?name);
+                        warnings.push(format!("Unknown env var in config. name = {:?}", name));
                         ""
                     })
                 })
@@ -33,21 +37,25 @@ mod test {
         .into_iter()
         .collect();
 
-        assert_eq!("dogs", interpolate("$FOO", &vars));
-        assert_eq!("dogs", interpolate("${FOO}", &vars));
-        assert_eq!("cats", interpolate("${FOOBAR}", &vars));
-        assert_eq!("xcatsy", interpolate("x${FOOBAR}y", &vars));
-        assert_eq!("x", interpolate("x$FOOBARy", &vars));
-        assert_eq!("$ x", interpolate("$ x", &vars));
-        assert_eq!("$FOO", interpolate("$$FOO", &vars));
-        assert_eq!("", interpolate("$NOT_FOO", &vars));
-        assert_eq!("-FOO", interpolate("$NOT-FOO", &vars));
-        assert_eq!("${FOO x", interpolate("${FOO x", &vars));
-        assert_eq!("${}", interpolate("${}", &vars));
-        assert_eq!("dogs", interpolate("${FOO:-cats}", &vars));
-        assert_eq!("dogcats", interpolate("${NOT:-dogcats}", &vars));
-        assert_eq!("dogs and cats", interpolate("${NOT:-dogs and cats}", &vars));
-        assert_eq!("${:-cats}", interpolate("${:-cats}", &vars));
-        assert_eq!("", interpolate("${NOT:-}", &vars));
+        let mut warn = Vec::new();
+        assert_eq!("dogs", interpolate("$FOO", &vars, &mut warn));
+        assert_eq!("dogs", interpolate("${FOO}", &vars, &mut warn));
+        assert_eq!("cats", interpolate("${FOOBAR}", &vars, &mut warn));
+        assert_eq!("xcatsy", interpolate("x${FOOBAR}y", &vars, &mut warn));
+        assert_eq!("x", interpolate("x$FOOBARy", &vars, &mut warn));
+        assert_eq!("$ x", interpolate("$ x", &vars, &mut warn));
+        assert_eq!("$FOO", interpolate("$$FOO", &vars, &mut warn));
+        assert_eq!("", interpolate("$NOT_FOO", &vars, &mut warn));
+        assert_eq!("-FOO", interpolate("$NOT-FOO", &vars, &mut warn));
+        assert_eq!("${FOO x", interpolate("${FOO x", &vars, &mut warn));
+        assert_eq!("${}", interpolate("${}", &vars, &mut warn));
+        assert_eq!("dogs", interpolate("${FOO:-cats}", &vars, &mut warn));
+        assert_eq!("dogcats", interpolate("${NOT:-dogcats}", &vars, &mut warn));
+        assert_eq!(
+            "dogs and cats",
+            interpolate("${NOT:-dogs and cats}", &vars, &mut warn)
+        );
+        assert_eq!("${:-cats}", interpolate("${:-cats}", &vars, &mut warn));
+        assert_eq!("", interpolate("${NOT:-}", &vars, &mut warn));
     }
 }

@@ -67,11 +67,15 @@ pub fn process_paths(config_paths: &[PathBuf]) -> Option<Vec<PathBuf>> {
 }
 
 pub fn load_from_paths(config_paths: &[PathBuf]) -> Result<Config, Vec<String>> {
-    load_builder_from_paths(config_paths).and_then(|builder| builder.build())
+    let mut warnings = Vec::new();
+    let result = load_builder_from_paths(config_paths, &mut warnings);
+    super::handle_warnings(warnings);
+    result.and_then(|builder| builder.build())
 }
 
-pub(super) fn load_builder_from_paths(
+pub fn load_builder_from_paths(
     config_paths: &[PathBuf],
+    warnings: &mut Vec<String>,
 ) -> Result<ConfigBuilder, Vec<String>> {
     let mut inputs = Vec::new();
     let mut errors = Vec::new();
@@ -85,24 +89,28 @@ pub(super) fn load_builder_from_paths(
     }
 
     if errors.is_empty() {
-        load_from_inputs(inputs)
+        load_from_inputs(inputs, warnings)
     } else {
         Err(errors)
     }
 }
 
 pub fn load_from_str(input: &str) -> Result<Config, Vec<String>> {
-    load_from_inputs(std::iter::once(input.as_bytes())).and_then(|builder| builder.build())
+    let mut warnings = Vec::new();
+    let result = load_from_inputs(std::iter::once(input.as_bytes()), &mut warnings);
+    super::handle_warnings(warnings);
+    result.and_then(|builder| builder.build())
 }
 
 fn load_from_inputs(
     inputs: impl IntoIterator<Item = impl std::io::Read>,
+    warnings: &mut Vec<String>,
 ) -> Result<ConfigBuilder, Vec<String>> {
     let mut config = Config::builder();
     let mut errors = Vec::new();
 
     for input in inputs {
-        if let Err(errs) = load(input).and_then(|n| config.append(n)) {
+        if let Err(errs) = load(input, warnings).and_then(|n| config.append(n)) {
             // TODO: add back paths
             errors.extend(errs.iter().map(|e| e.to_string()));
         }
@@ -130,7 +138,10 @@ fn open_config(path: &Path) -> Option<File> {
     }
 }
 
-fn load(mut input: impl std::io::Read) -> Result<ConfigBuilder, Vec<String>> {
+fn load(
+    mut input: impl std::io::Read,
+    warnings: &mut Vec<String>,
+) -> Result<ConfigBuilder, Vec<String>> {
     let mut source_string = String::new();
     input
         .read_to_string(&mut source_string)
@@ -142,7 +153,7 @@ fn load(mut input: impl std::io::Read) -> Result<ConfigBuilder, Vec<String>> {
             vars.insert("HOSTNAME".into(), hostname);
         }
     }
-    let with_vars = vars::interpolate(&source_string, &vars);
+    let with_vars = vars::interpolate(&source_string, &vars, warnings);
 
     toml::from_str(&with_vars).map_err(|e| vec![e.to_string()])
 }

@@ -1,7 +1,7 @@
 use super::{builder::ConfigBuilder, validation, Config, TransformOuter};
 use indexmap::IndexMap;
 
-pub fn compile(raw: ConfigBuilder) -> Result<Config, Vec<String>> {
+pub fn compile(raw: ConfigBuilder, warnings: &mut Vec<String>) -> Result<Config, Vec<String>> {
     let mut config = Config {
         global: raw.global,
         #[cfg(feature = "api")]
@@ -17,10 +17,8 @@ pub fn compile(raw: ConfigBuilder) -> Result<Config, Vec<String>> {
 
     expand_macros(&mut config)?;
 
-    if let Some(warnings) = validation::warnings(&config) {
-        for warning in warnings {
-            warn!(message = %warning)
-        }
+    if let Some(warn) = validation::warnings(&config) {
+        warnings.extend(warn);
     }
 
     if let Err(type_errors) = validation::check_shape(&config) {

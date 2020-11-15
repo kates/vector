@@ -25,8 +25,11 @@ mod vars;
 pub mod watcher;
 
 pub use builder::ConfigBuilder;
+pub use compiler::compile;
 pub use diff::ConfigDiff;
-pub use loading::{load_from_paths, load_from_str, process_paths, CONFIG_PATHS};
+pub use loading::{
+    load_builder_from_paths, load_from_paths, load_from_str, process_paths, CONFIG_PATHS,
+};
 pub use log_schema::{log_schema, LogSchema, LOG_SCHEMA};
 pub use unit_test::build_unit_tests_main as build_unit_tests;
 pub use validation::warnings;
@@ -344,6 +347,12 @@ impl Config {
             .get(identifier)
             .cloned()
             .unwrap_or_else(|| vec![String::from(identifier)])
+    }
+}
+
+fn handle_warnings(warnings: Vec<String>) {
+    for warning in warnings {
+        warn!(message = %warning);
     }
 }
 

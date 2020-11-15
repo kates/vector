@@ -16,7 +16,7 @@ pub struct Opts {
     #[structopt(long)]
     no_environment: bool,
 
-    /// Fail validation on warnings
+    /// Fail validation on warnings that are probably a mistake in the configuration.
     #[structopt(short, long)]
     deny_warnings: bool,
 
@@ -38,7 +38,7 @@ pub async fn validate(opts: &Opts, color: bool) -> ExitCode {
 
     if !opts.no_environment {
         if let Some(tmp_directory) = create_tmp_directory(&mut config, &mut fmt) {
-            validated &= validate_environment(&config, &mut fmt).await;
+            validated &= validate_environment(opts, &config, &mut fmt).await;
             remove_tmp_directory(tmp_directory);
         } else {
             validated = false;
@@ -64,12 +64,32 @@ fn validate_config(opts: &Opts, fmt: &mut Formatter) -> Option<Config> {
         return None;
     };
 
-    match config::load_from_paths(&paths) {
-        Ok(config) => {
+    let mut warnings = Vec::new();
+    match config::load_builder_from_paths(&paths, &mut warnings) {
+        Ok(builder) => {
             fmt.success(format!("Loaded {:?}", &paths));
-            Some(config)
+            match config::compile(builder, &mut warnings) {
+                Ok(config) => {
+                    if opts.deny_warnings && !warnings.is_empty() {
+                        fmt.title(format!("Failed to compile configuration"));
+                        fmt.sub(fmt.warning_intro.clone(), warnings);
+                        None
+                    } else {
+                        fmt.warnings(warnings);
+                        fmt.success("Configuration compiled");
+                        Some(config)
+                    }
+                }
+                Err(errors) => {
+                    fmt.warnings(warnings);
+                    fmt.title(format!("Failed to compile configuration"));
+                    fmt.sub_error(errors);
+                    None
+                }
+            }
         }
         Err(errors) => {
+            fmt.warnings(warnings);
             fmt.title(format!("Failed to load {:?}", paths));
             fmt.sub_error(errors);
             None
@@ -77,7 +97,7 @@ fn validate_config(opts: &Opts, fmt: &mut Formatter) -> Option<Config> {
     }
 }
 
-async fn validate_environment(config: &Config, fmt: &mut Formatter) -> bool {
+async fn validate_environment(opts: &Opts, config: &Config, fmt: &mut Formatter) -> bool {
     let diff = ConfigDiff::initial(config);
 
     let mut pieces = if let Some(pieces) = validate_components(config, &diff, fmt).await {
@@ -86,7 +106,7 @@ async fn validate_environment(config: &Config, fmt: &mut Formatter) -> bool {
         return false;
     };
 
-    validate_healthchecks(config, &diff, &mut pieces, fmt).await
+    validate_healthchecks(opts, config, &diff, &mut pieces, fmt).await
 }
 
 async fn validate_components(
@@ -112,6 +132,7 @@ async fn validate_components(
 }
 
 async fn validate_healthchecks(
+    opts: &Opts,
     config: &Config,
     diff: &ConfigDiff,
     pieces: &mut Pieces,
@@ -138,6 +159,7 @@ async fn validate_healthchecks(
                     fmt.success(format!("Health check `{}`", name.as_str()));
                 } else {
                     fmt.warning(format!("Health check disabled for `{}`", name));
+                    validated &= !opts.deny_warnings;
                 }
             }
             Ok(Err(())) => failed(format!("Health check for `{}` failed", name.as_str())),
@@ -239,6 +261,16 @@ impl Formatter {
     /// Standalone line
     fn warning(&mut self, warning: impl AsRef<str>) {
         self.print(format!("{} {}\n", self.warning_intro, warning.as_ref()))
+    }
+
+    /// Standalone lines
+    fn warnings<I: IntoIterator>(&mut self, warnings: I)
+    where
+        I::Item: AsRef<str>,
+    {
+        for warning in warnings {
+            self.warning(warning);
+        }
     }
 
     /// Standalone line
