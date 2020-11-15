@@ -71,7 +71,7 @@ fn validate_config(opts: &Opts, fmt: &mut Formatter) -> Option<Config> {
             match config::compile(builder, &mut warnings) {
                 Ok(config) => {
                     if opts.deny_warnings && !warnings.is_empty() {
-                        fmt.title(format!("Failed to compile configuration"));
+                        fmt.title("Failed to compile configuration");
                         fmt.sub(fmt.warning_intro.clone(), warnings);
                         None
                     } else {
@@ -82,7 +82,7 @@ fn validate_config(opts: &Opts, fmt: &mut Formatter) -> Option<Config> {
                 }
                 Err(errors) => {
                     fmt.warnings(warnings);
-                    fmt.title(format!("Failed to compile configuration"));
+                    fmt.title("Failed to compile configuration");
                     fmt.sub_error(errors);
                     None
                 }
